@@ -111,12 +111,11 @@ class SVM(BaseEstimator):
         K = pairwise_kernels(X, metric=self.kernel, **self.kernel_args)
 
         self.dual_coef_ = np.zeros(n_samples)
-        self.intercept_ = 0.0
         self.usew_ = False
 
-        _optimize(self, K, X, y, self.support_vectors_, self.dual_coef_,
-                  self.C, n_samples, random_state, self.tol, self.numpasses,
-                  self.maxiter, self.verbose)
+        self.intercept_ = _optimize(
+            K, y, self.dual_coef_, self.C, random_state, self.tol,
+            self.numpasses, self.maxiter, self.verbose)
 
         # If the user was using a linear kernel, lets also compute and store
         # the weights. This will speed up evaluations during testing time.

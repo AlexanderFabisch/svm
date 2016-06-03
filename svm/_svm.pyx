@@ -5,21 +5,20 @@ from sklearn.metrics.pairwise import pairwise_kernels
 
 
 @cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.nonecheck(False)
 @cython.cdivision(True)
-def _optimize(
-        object self,
+cpdef double _optimize(
         np.ndarray[np.float_t, ndim=2] K,
-        np.ndarray[np.float_t, ndim=2] X,
         np.ndarray[np.float_t, ndim=1] y,
-        np.ndarray[np.float_t, ndim=2] support_vectors_,
         np.ndarray[np.float_t, ndim=1] dual_coef_,
         double C,
-        int n_samples,
         object random_state,
         double tol,
         int numpasses,
         int maxiter,
         int verbose):
+    cdef int n_samples = K.shape[0]
     cdef int it = 0
     cdef int passes = 0
     cdef int alphas_changed
@@ -63,10 +62,8 @@ def _optimize(
                 # compute new alpha[j] and clip it inside [0 C]x[0 C]
                 # box then compute alpha[i] based on it.
                 newaj = aj - y[j] * (Ei - Ej) / eta
-                if newaj > H:
-                    newaj = H
-                if newaj < L:
-                    newaj = L
+                newaj = min(newaj, H)
+                newaj = max(newaj, L)
                 if abs(aj - newaj) < 1e-4:
                     continue
                 dual_coef_[j] = newaj
@@ -94,14 +91,18 @@ def _optimize(
         else:
             passes = 0
 
-        if verbose >= 2 and maxiter % (it + 1) == 0:
+        if verbose >= 2 and (it + 1) % (maxiter / 10) == 0:
             print("[SVM] Finished iteration %d" % it)
 
-    self.intercept_ = b
+    return b
 
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.nonecheck(False)
+@cython.cdivision(True)
 cdef double _margins_kernel(
         np.ndarray[np.float_t, ndim=1] yk,
         np.ndarray[np.float_t, ndim=1] dual_coef,
         double intercept):
-    return intercept + np.sum(dual_coef * yk)
+    return intercept + np.dot(dual_coef, yk)
