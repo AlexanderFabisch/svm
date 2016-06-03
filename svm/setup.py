@@ -27,7 +27,8 @@ if __name__ == '__main__':
                 "-std=c++11",
                 # disable warnings caused by Cython using the deprecated
                 # NumPy C-API
-                "-Wno-cpp", "-Wno-unused-function"
+                "-Wno-cpp", "-Wno-unused-function",
+                "-O3"
             ],
             language = "c++"
         )

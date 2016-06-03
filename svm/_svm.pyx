@@ -1,38 +1,44 @@
 import numpy as np
 cimport numpy as np
 cimport cython
+from sklearn.metrics.pairwise import pairwise_kernels
 
 
 @cython.boundscheck(False)
 @cython.cdivision(True)
 def _optimize(
-        self, np.ndarray[np.float_t, ndim=2] K,
+        object self,
+        np.ndarray[np.float_t, ndim=2] K,
         np.ndarray[np.float_t, ndim=2] X,
         np.ndarray[np.float_t, ndim=1] y,
+        np.ndarray[np.float_t, ndim=2] support_vectors_,
         np.ndarray[np.float_t, ndim=1] dual_coef_,
         double C,
         int n_samples,
         object random_state,
         int numpasses,
-        int maxiter):
+        int maxiter,
+        int verbose):
     cdef int it = 0
     cdef int passes = 0
     cdef int alphas_changed
     cdef int i, j
-    cdef double Ei, Ej, ai, aj, newai, newaj, eta, L, H
+    cdef double Ei, Ej, ai, aj, newai, newaj, eta, L, H, b1, b2, current_y
 
     cdef double b = 0.0
     while passes < numpasses and it < maxiter:
         alphas_changed = 0
         for i in range(n_samples):
-            Ei = self._margins(self.support_vectors_[np.newaxis, i], dual_coef_, y, b)[0] - y[i]
+            current_y = _margins(self, support_vectors_[np.newaxis, i], dual_coef_, y, b)[0]
+            Ei = current_y - y[i]
             if ((y[i] * Ei < -self.tol and dual_coef_[i] < C) or
                     (y[i] * Ei > self.tol and dual_coef_[i] > 0)):
                 # self.alphas[i] needs updating! Pick a j to update it with
                 j = i
                 while j == i:
                     j = random_state.randint(n_samples)
-                Ej = self._margins(self.support_vectors_[np.newaxis, j], dual_coef_, y, b)[0] - y[j]
+                current_y = _margins(self, support_vectors_[np.newaxis, j], dual_coef_, y, b)[0]
+                Ej = current_y - y[j]
 
                 # compute L and H bounds for j to ensure we're in [0 C]x[0 C] box
                 ai = dual_coef_[i]
@@ -65,13 +71,12 @@ def _optimize(
                 dual_coef_[i] = newai
 
                 # update the bias term
-                b1 = (
-                    b - Ei - y[i] * (newai - ai) * K[i, i] -
-                    y[j] * (newaj - aj) * K[i, j])
-                b2 = (
-                    b - Ej - y[i] * (newai - ai) * K[i, j] -
-                    y[j] * (newaj - aj) * K[j, j])
+                b1 = (b - Ei - y[i] * (newai - ai) * K[i, i] -
+                      y[j] * (newaj - aj) * K[i, j])
+                b2 = (b - Ej - y[i] * (newai - ai) * K[i, j] -
+                      y[j] * (newaj - aj) * K[j, j])
                 b = 0.5 * (b1 + b2)
+
                 if newai > 0 and newai < C:
                     b = b1
                 if newaj > 0 and newaj < C:
@@ -80,12 +85,21 @@ def _optimize(
                 alphas_changed += 1
 
         it += 1
-        self.intercept_ = b
 
         if alphas_changed == 0:
             passes += 1
         else:
             passes = 0
 
-        if self.verbose >= 2 and maxiter % (it + 1) == 0:
+        if verbose >= 2 and maxiter % (it + 1) == 0:
             print("[SVM] Finished iteration %d" % it)
+
+    self.intercept_ = b
+
+
+def _margins(self, X, dual_coef, y_train, intercept):
+    K = pairwise_kernels(X, self.support_vectors_, metric=self.kernel,
+                         **self.kernel_args)
+    y = intercept + np.sum(dual_coef[np.newaxis, :] * y_train * K, axis=1)
+
+    return y

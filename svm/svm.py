@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.utils import check_array, check_random_state
-from ._svm import _optimize
+from ._svm import _optimize, _margins
 
 
 class SVM(BaseEstimator):
@@ -114,8 +114,9 @@ class SVM(BaseEstimator):
         self.intercept_ = 0.0
         self.usew_ = False
 
-        _optimize(self, K, X, y, self.dual_coef_, self.C, n_samples,
-                  random_state, self.numpasses, self.maxiter)
+        _optimize(self, K, X, y, self.support_vectors_, self.dual_coef_,
+                  self.C, n_samples, random_state, self.numpasses,
+                  self.maxiter, self.verbose)
 
         # If the user was using a linear kernel, lets also compute and store
         # the weights. This will speed up evaluations during testing time.
@@ -134,18 +135,10 @@ class SVM(BaseEstimator):
         self.support_vectors_ = X[support_vectors]
         self.y = y[support_vectors]
 
-    def _margins(self, X, dual_coef, y_train, intercept):
-        X = check_array(X)
-
-        if self.usew_:
-            y = np.dot(X, self.coef_) + self.intercept_
-        else:
-            K = pairwise_kernels(X, self.support_vectors_, metric=self.kernel,
-                                 **self.kernel_args)
-            y = intercept + np.sum(dual_coef[np.newaxis, :] * y_train * K, axis=1)
-
-        return y
-
     def predict(self, X):
-        return np.sign(self._margins(X, self.dual_coef_, self.y,
-                                     self.intercept_))
+        X = check_array(X)
+        if self.usew_:
+            return np.sign(np.dot(X, self.coef_) + self.intercept_)
+        else:
+            return np.sign(_margins(self, X, self.dual_coef_, self.y,
+                                    self.intercept_))
