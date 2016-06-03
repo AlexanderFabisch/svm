@@ -12,7 +12,7 @@ def test_linear_svm():
     w = np.array([0.5, -0.3])
     y = np.sign(b + np.dot(X, w))
 
-    svm = SVM(kernel="linear", C=1.0)
+    svm = SVM(kernel="linear", C=1.0, random_state=random_state)
     svm.fit(X, y)
     y_pred = svm.predict(X)
     assert_array_almost_equal(y, y_pred)
@@ -28,7 +28,7 @@ def test_rbf_svm():
     X[:, 1] = random_state.randn(n_samples)
     y = np.sign(X[:, 1] - np.sin(2.0 * np.pi * np.sin(X[:, 0])))
 
-    svm = SVM(kernel="rbf", C=1.0, gamma=1.0)
+    svm = SVM(kernel="rbf", C=1.0, gamma=1.0, random_state=random_state)
     svm.fit(X, y)
     y_pred = svm.predict(X)
 
@@ -43,7 +43,8 @@ def test_poly_svm():
     X[:, 1] = random_state.randn(n_samples)
     y = np.sign(X[:, 1] - np.sin(2.0 * np.pi * np.sin(X[:, 0])))
 
-    svm = SVM(kernel="poly", C=1.0, degree=3, coef0=1.0)
+    svm = SVM(kernel="poly", C=1.0, degree=3, coef0=1.0,
+              random_state=random_state)
     svm.fit(X, y)
     y_pred = svm.predict(X)
 

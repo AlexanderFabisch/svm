@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.utils import check_array, check_random_state
-from ._svm import _optimize, _margins
+from ._svm import _optimize
 
 
 class SVM(BaseEstimator):
@@ -115,7 +115,7 @@ class SVM(BaseEstimator):
         self.usew_ = False
 
         _optimize(self, K, X, y, self.support_vectors_, self.dual_coef_,
-                  self.C, n_samples, random_state, self.numpasses,
+                  self.C, n_samples, random_state, self.tol, self.numpasses,
                   self.maxiter, self.verbose)
 
         # If the user was using a linear kernel, lets also compute and store
@@ -140,5 +140,8 @@ class SVM(BaseEstimator):
         if self.usew_:
             return np.sign(np.dot(X, self.coef_) + self.intercept_)
         else:
-            return np.sign(_margins(self, X, self.dual_coef_, self.y,
-                                    self.intercept_))
+            K = pairwise_kernels(X, self.support_vectors_, metric=self.kernel,
+                                 **self.kernel_args)
+            return np.sign(self.intercept_ + np.sum(
+                self.dual_coef_[np.newaxis, :] * self.y * K, axis=1))
+

@@ -1,5 +1,5 @@
-import numpy as np
 cimport numpy as np
+import numpy as np
 cimport cython
 from sklearn.metrics.pairwise import pairwise_kernels
 
@@ -16,6 +16,7 @@ def _optimize(
         double C,
         int n_samples,
         object random_state,
+        double tol,
         int numpasses,
         int maxiter,
         int verbose):
@@ -25,19 +26,21 @@ def _optimize(
     cdef int i, j
     cdef double Ei, Ej, ai, aj, newai, newaj, eta, L, H, b1, b2, current_y
 
+    cdef np.ndarray[np.float_t, ndim=2] yK = y * K
+
     cdef double b = 0.0
     while passes < numpasses and it < maxiter:
         alphas_changed = 0
         for i in range(n_samples):
-            current_y = _margins(self, support_vectors_[np.newaxis, i], dual_coef_, y, b)[0]
+            current_y = _margins_kernel(yK[i], dual_coef_, b)
             Ei = current_y - y[i]
-            if ((y[i] * Ei < -self.tol and dual_coef_[i] < C) or
-                    (y[i] * Ei > self.tol and dual_coef_[i] > 0)):
+            if ((y[i] * Ei < -tol and dual_coef_[i] < C) or
+                    (y[i] * Ei > tol and dual_coef_[i] > 0)):
                 # self.alphas[i] needs updating! Pick a j to update it with
                 j = i
                 while j == i:
                     j = random_state.randint(n_samples)
-                current_y = _margins(self, support_vectors_[np.newaxis, j], dual_coef_, y, b)[0]
+                current_y = _margins_kernel(yK[j], dual_coef_, b)
                 Ej = current_y - y[j]
 
                 # compute L and H bounds for j to ensure we're in [0 C]x[0 C] box
@@ -97,9 +100,8 @@ def _optimize(
     self.intercept_ = b
 
 
-def _margins(self, X, dual_coef, y_train, intercept):
-    K = pairwise_kernels(X, self.support_vectors_, metric=self.kernel,
-                         **self.kernel_args)
-    y = intercept + np.sum(dual_coef[np.newaxis, :] * y_train * K, axis=1)
-
-    return y
+cdef double _margins_kernel(
+        np.ndarray[np.float_t, ndim=1] yk,
+        np.ndarray[np.float_t, ndim=1] dual_coef,
+        double intercept):
+    return intercept + np.sum(dual_coef * yk)
