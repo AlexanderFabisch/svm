@@ -1,11 +1,3 @@
-"""Support vector machine (SVM).
-
-
-Simple usage example:
-svm = SVM();
-svm.fit(data, labels);
-testlabels = svm.predict(testdata);
-"""
 import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.metrics.pairwise import pairwise_kernels
@@ -18,18 +10,32 @@ class SVM(BaseEstimator):
     This is a binary SVM and is trained using the SMO algorithm.
     Reference: "The Simplified SMO Algorithm"
     (http://math.unt.edu/~hsp0009/smo.pdf)
+    Based on Karpathy's svm.js implementation:
+    https://github.com/karpathy/svmjs
 
     Parameters
     ----------
     C : float, optional (default: 1)
-        C value. Decrease for more regularization
+        Penalty parameter C of the error term.
 
-    kernel : string, optional (default: 'linear')
-        Kernel function, valid values are
-            ['rbf', 'sigmoid', 'polynomial', 'poly', 'linear', 'cosine']
+    kernel : string, optional (default: 'rbf')
+         Specifies the kernel type to be used in the algorithm.
+         It must be one of 'linear', 'poly', 'rbf', 'sigmoid', 'precomputed' or
+         a callable.
+         If none is given, 'rbf' will be used. If a callable is given it is
+         used to pre-compute the kernel matrix from data matrices; that matrix
+         should be an array of shape ``(n_samples, n_samples)``
 
-    gamma : float, optional (default: None)
+    degree : int, optional (default: 3)
+        Degree of the polynomial kernel function ('poly').
+        Ignored by all other kernels.
+
+    gamma : float, optional (default: 1)
         Parameter for RBF kernel
+
+    coef0 : float, optional (default: 0.0)
+        Independent term in kernel function.
+        It is only significant in 'poly' and 'sigmoid'.
 
     tol : float, optional (default: 1e-4)
         Numerical tolerance. Usually this should not be modified.
@@ -54,13 +60,29 @@ class SVM(BaseEstimator):
 
     verbose : int, optional (default: 0)
         Verbosity level
+
+    Attributes
+    ----------
+    support_vectors_ : array-like, shape = [n_support_vectors, n_features]
+        Support vectors.
+
+    coef_ : array, shape = [n_features]
+        Weights assigned to the features (coefficients in the primal
+        problem). This is only available in the case of a linear kernel.
+        `coef_` is a readonly property derived from `dual_coef_` and
+        `support_vectors_`.
+
+    intercept_ : float
+        Constant in decision function.
     """
-    def __init__(self, C=1.0, kernel="linear", gamma=None, tol=1e-4,
-                 alphatol=1e-7, maxiter=10000, numpasses=10,
+    def __init__(self, C=1.0, kernel="rbf", degree=3, gamma=1.0, coef0=0.0,
+                 tol=1e-4, alphatol=1e-7, maxiter=10000, numpasses=10,
                  random_state=None, verbose=0):
         self.C = C
         self.kernel = kernel
+        self.degree = degree
         self.gamma = gamma
+        self.coef0 = coef0
         self.tol = tol
         self.alphatol = alphatol
         self.maxiter = maxiter
@@ -69,7 +91,7 @@ class SVM(BaseEstimator):
         self.verbose = verbose
 
     def fit(self, X, y):
-        self.X = check_array(X)
+        self.support_vectors_ = check_array(X)
         self.y = check_array(y, ensure_2d=False)
 
         random_state = check_random_state(self.random_state)
@@ -79,29 +101,35 @@ class SVM(BaseEstimator):
         self.kernel_args = {}
         if self.kernel == "rbf" and self.gamma is not None:
             self.kernel_args["gamma"] = self.gamma
+        elif self.kernel == "poly":
+            self.kernel_args["degree"] = self.degree
+            self.kernel_args["coef0"] = self.coef0
+        elif self.kernel == "sigmoid":
+            self.kernel_args["coef0"] = self.coef0
+
         K = pairwise_kernels(X, metric=self.kernel, **self.kernel_args)
 
-        self.alphas = np.zeros(n_samples)
-        self.b = 0.0
+        self.dual_coef_ = np.zeros(n_samples)
+        self.intercept_ = 0.0
         self.usew_ = False
 
         it = 0
         passes = 0
         while passes < self.numpasses and it < self.maxiter:
-            alphaChanged = 0
+            alphas_changed = 0
             for i in range(n_samples):
-                Ei = self.margins(self.X[np.newaxis, i])[0] - self.y[i]
-                if ((self.y[i] * Ei < -self.tol and self.alphas[i] < self.C) or
-                        (self.y[i] * Ei > self.tol and self.alphas[i] > 0)):
+                Ei = self.margins(self.support_vectors_[np.newaxis, i])[0] - self.y[i]
+                if ((self.y[i] * Ei < -self.tol and self.dual_coef_[i] < self.C) or
+                        (self.y[i] * Ei > self.tol and self.dual_coef_[i] > 0)):
                     # self.alphas[i] needs updating! Pick a j to update it with
                     j = i
                     while j == i:
                         j = random_state.randint(n_samples)
-                    Ej = self.margins(self.X[np.newaxis, j])[0] - self.y[j]
+                    Ej = self.margins(self.support_vectors_[np.newaxis, j])[0] - self.y[j]
 
                     # calculate L and H bounds for j to ensure we're in [0 C]x[0 C] box
-                    ai = self.alphas[i]
-                    aj = self.alphas[j]
+                    ai = self.dual_coef_[i]
+                    aj = self.dual_coef_[j]
                     L = 0
                     H = self.C
                     if y[i] == y[j]:
@@ -127,26 +155,26 @@ class SVM(BaseEstimator):
                         newaj = L
                     if abs(aj - newaj) < 1e-4:
                         continue
-                    self.alphas[j] = newaj
+                    self.dual_coef_[j] = newaj
                     newai = ai + self.y[i] * self.y[j] * (aj - newaj)
-                    self.alphas[i] = newai
+                    self.dual_coef_[i] = newai
 
                     # update the bias term
-                    b1 = (self.b - Ei - self.y[i] * (newai - ai) * K[i, i] -
+                    b1 = (self.intercept_ - Ei - self.y[i] * (newai - ai) * K[i, i] -
                           self.y[j] * (newaj - aj) * K[i, j])
-                    b2 = (self.b - Ej - self.y[i] * (newai - ai) * K[i, j] -
+                    b2 = (self.intercept_ - Ej - self.y[i] * (newai - ai) * K[i, j] -
                           self.y[j] * (newaj - aj) * K[j, j])
                     b = 0.5 * (b1 + b2)
                     if newai > 0 and newai < self.C:
-                        self.b = b1
+                        self.intercept_ = b1
                     if newaj > 0 and newaj < self.C:
-                        self.b = b2
+                        self.intercept_ = b2
 
-                    alphaChanged += 1
+                    alphas_changed += 1
 
             it += 1
 
-            if alphaChanged == 0:
+            if alphas_changed == 0:
                 passes += 1
             else:
                 passes = 0
@@ -158,9 +186,9 @@ class SVM(BaseEstimator):
         # weights. This will speed up evaluations during testing time
         if self.kernel == "linear":
             # compute weights and store them
-            self.w = np.zeros(n_features)
+            self.coef_ = np.zeros(n_features)
             for j in range(n_features):
-                self.w[j] += np.dot(self.alphas * self.y, self.X[:, j])
+                self.coef_[j] += np.dot(self.dual_coef_ * self.y, self.support_vectors_[:, j])
             self.usew_ = True
         else:
             self.usew_ = False
@@ -172,39 +200,22 @@ class SVM(BaseEstimator):
             # testing instances. So filter here based on self.self.alphas[i]. The
             # training data for which self.self.alphas[i] = 0 is irrelevant for
             # future. 
-            support_vectors = np.nonzero(self.alphas)
-            self.n_support_vectors = len(support_vectors[0])
-            self.alphas = self.alphas[support_vectors]
-            self.X = X[support_vectors]
-            self.y = y[support_vectors]
+        support_vectors = np.nonzero(self.dual_coef_)
+        self.dual_coef_ = self.dual_coef_[support_vectors]
+        self.support_vectors_ = X[support_vectors]
+        self.y = y[support_vectors]
 
     def margins(self, X):
         X = check_array(X)
-        n_samples, n_features = X.shape
 
         if self.usew_:
-            y = np.empty(n_samples)
-            for n in range(n_samples):
-                y[n] = float(self.w.dot(X[n]) + self.b)
+            y = np.dot(X, self.coef_) + self.intercept_
         else:
-            K = pairwise_kernels(X, self.X, metric=self.kernel,
+            K = pairwise_kernels(X, self.support_vectors_, metric=self.kernel,
                                  **self.kernel_args)
-            y = self.b + np.sum(self.alphas[np.newaxis, :] * self.y * K, axis=1)
+            y = self.intercept_ + np.sum(self.dual_coef_[np.newaxis, :] * self.y * K, axis=1)
 
         return y
 
     def predict(self, X):
         return np.sign(self.margins(X))
-
-
-if __name__ == "__main__":
-    from sklearn.metrics import accuracy_score
-    random_state = np.random.RandomState(0)
-    X = random_state.randn(100, 3)
-    y = random_state.randn(100)
-    y[y > 0.0] = 1.0
-    y[y <= 0.0] = -1.0
-    svm = SVM(kernel="rbf", gamma=10.0, random_state=0)
-    svm.fit(X, y)
-    print(accuracy_score(y, svm.predict(X)))
-    print(svm.margins(X))
