@@ -1,12 +1,11 @@
+#cython: boundscheck=False
+#cython: wraparound=False
+#cython: nonecheck=False
+#cython: cdivision=False
 cimport numpy as np
 import numpy as np
-cimport cython
 
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.nonecheck(False)
-@cython.cdivision(True)
 cpdef double _optimize(
         np.ndarray[np.float_t, ndim=2] K,
         np.ndarray[np.float_t, ndim=1] y,
@@ -96,10 +95,6 @@ cpdef double _optimize(
     return b
 
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.nonecheck(False)
-@cython.cdivision(True)
 cdef double _margins_kernel(
         np.ndarray[np.float_t, ndim=1] yk,
         np.ndarray[np.float_t, ndim=1] dual_coef,
