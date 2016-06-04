@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.utils import check_array, check_random_state
-from ._svm import _optimize
+from _svm import _optimize
 
 
 class SVM(BaseEstimator):
