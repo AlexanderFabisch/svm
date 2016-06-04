@@ -1,11 +1,11 @@
 import numpy as np
-from sklearn.base import BaseEstimator
+from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.utils import check_array, check_random_state
 from _svm import _optimize
 
 
-class SVM(BaseEstimator):
+class SVM(BaseEstimator, ClassifierMixin):
     """Support vector machine (SVM).
 
     This is a binary SVM and is trained using the SMO algorithm.
@@ -92,6 +92,20 @@ class SVM(BaseEstimator):
         self.verbose = verbose
 
     def fit(self, X, y):
+        """Fit the model to data matrix X and target y.
+
+        Parameters
+        ----------
+        X : array-like, shape (n_samples, n_features)
+            The input data.
+
+        y : array-like, shape (n_samples,)
+            The class labels.
+
+        Returns
+        -------
+        self : returns a trained SVM
+        """
         self.support_vectors_ = check_array(X)
         self.y = check_array(y, ensure_2d=False)
 
@@ -134,13 +148,41 @@ class SVM(BaseEstimator):
         self.support_vectors_ = X[support_vectors]
         self.y = y[support_vectors]
 
-    def predict(self, X):
+        return self
+
+    def decision_function(self, X):
+        """Decision function of the SVM.
+
+        Parameters
+        ----------
+        X : array-like, shape (n_samples, n_features)
+            The input data.
+
+        Returns
+        -------
+        y : array-like, shape (n_samples,)
+            The values of decision function.
+        """
         X = check_array(X)
         if self.usew_:
-            return np.sign(np.dot(X, self.coef_) + self.intercept_)
+            return np.dot(X, self.coef_) + self.intercept_
         else:
             K = pairwise_kernels(X, self.support_vectors_, metric=self.kernel,
                                  **self.kernel_args)
-            return np.sign(self.intercept_ + np.sum(
-                self.dual_coef_[np.newaxis, :] * self.y * K, axis=1))
+            return (self.intercept_ + np.sum(self.dual_coef_[np.newaxis, :] *
+                                             self.y * K, axis=1))
 
+    def predict(self, X):
+        """Predict class labels.
+
+        Parameters
+        ----------
+        X : array-like, shape (n_samples, n_features)
+            The input data.
+
+        Returns
+        -------
+        y : array-like, shape (n_samples,)
+            The predicted classes.
+        """
+        return np.sign(self.decision_function(X))

@@ -1,7 +1,6 @@
 cimport numpy as np
 import numpy as np
 cimport cython
-from sklearn.metrics.pairwise import pairwise_kernels
 
 
 @cython.boundscheck(False)
