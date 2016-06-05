@@ -111,8 +111,6 @@ class SVM(BaseEstimator, ClassifierMixin):
 
         random_state = check_random_state(self.random_state)
 
-        n_samples, n_features = X.shape
-
         self.kernel_args = {}
         if self.kernel == "rbf" and self.gamma is not None:
             self.kernel_args["gamma"] = self.gamma
@@ -123,10 +121,8 @@ class SVM(BaseEstimator, ClassifierMixin):
             self.kernel_args["coef0"] = self.coef0
 
         K = pairwise_kernels(X, metric=self.kernel, **self.kernel_args)
-
+        n_samples, n_features = X.shape
         self.dual_coef_ = np.zeros(n_samples)
-        self.usew_ = False
-
         self.intercept_ = _optimize(
             K, y, self.dual_coef_, self.C, random_state, self.tol,
             self.numpasses, self.maxiter, self.verbose)
@@ -134,13 +130,7 @@ class SVM(BaseEstimator, ClassifierMixin):
         # If the user was using a linear kernel, lets also compute and store
         # the weights. This will speed up evaluations during testing time.
         if self.kernel == "linear":
-            self.coef_ = np.zeros(n_features)
-            for j in range(n_features):
-                self.coef_[j] += np.dot(self.dual_coef_ * self.y,
-                                        self.support_vectors_[:, j])
-            self.usew_ = True
-        else:
-            self.usew_ = False
+            self.coef_ = np.dot(self.dual_coef_ * self.y, self.support_vectors_)
 
         # only samples with nonzero coefficients are relevant for predictions
         support_vectors = np.nonzero(self.dual_coef_)
@@ -164,8 +154,8 @@ class SVM(BaseEstimator, ClassifierMixin):
             The values of decision function.
         """
         X = check_array(X)
-        if self.usew_:
-            return np.dot(X, self.coef_) + self.intercept_
+        if self.kernel == "linear":
+            return self.intercept_ + np.dot(X, self.coef_)
         else:
             K = pairwise_kernels(X, self.support_vectors_, metric=self.kernel,
                                  **self.kernel_args)
