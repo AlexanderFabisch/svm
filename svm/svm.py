@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.metrics.pairwise import pairwise_kernels
 from sklearn.utils import check_array, check_random_state
-from _svm import _optimize
+from . import _svm
 
 
 class SVM(BaseEstimator, ClassifierMixin):
@@ -122,7 +122,7 @@ class SVM(BaseEstimator, ClassifierMixin):
 
         K = pairwise_kernels(X, metric=self.kernel, **self.kernel_args)
         self.dual_coef_ = np.zeros(X.shape[0])
-        self.intercept_ = _optimize(
+        self.intercept_ = _svm.smo(
             K, y, self.dual_coef_, self.C, random_state, self.tol,
             self.numpasses, self.maxiter, self.verbose)
 

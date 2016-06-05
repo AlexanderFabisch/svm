@@ -9,7 +9,6 @@ This is a binary SVM and is trained using the SMO algorithm.
 
 This implementation is based on Cython, NumPy, and scikit-learn.
 
-
 Installation
 ------------
 
@@ -17,3 +16,13 @@ The packages Cython, numpy and scikit-learn are required. You
 can clone this repository and run the installation script with
 
     sudo python setup.py install
+
+Tests
+-----
+
+In order to run the unit tests, you must build the Cython extension
+first
+
+    python setup.py build_ext --inplace
+
+and then run nosetests.

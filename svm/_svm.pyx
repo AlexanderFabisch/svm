@@ -6,8 +6,7 @@ cimport numpy as np
 import numpy as np
 
 
-cpdef double _optimize(
-        np.ndarray[np.float_t, ndim=2] K,
+def smo(np.ndarray[np.float_t, ndim=2] K,
         np.ndarray[np.float_t, ndim=1] y,
         np.ndarray[np.float_t, ndim=1] dual_coef_,
         double C,
