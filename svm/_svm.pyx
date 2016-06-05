@@ -1,12 +1,13 @@
 #cython: boundscheck=False
 #cython: wraparound=False
 #cython: nonecheck=False
-#cython: cdivision=False
+#cython: cdivision=True
 cimport numpy as np
 import numpy as np
 
 
-def smo(np.ndarray[np.float_t, ndim=2] K,
+cpdef double smo(
+        np.ndarray[np.float_t, ndim=2] K,
         np.ndarray[np.float_t, ndim=1] y,
         np.ndarray[np.float_t, ndim=1] dual_coef_,
         double C,
@@ -15,12 +16,17 @@ def smo(np.ndarray[np.float_t, ndim=2] K,
         int numpasses,
         int maxiter,
         int verbose):
+    """Sequential Minimal Optimization (SMO) for binary SVM.
+
+    This is a simplified implementation that is not guaranteed to converge to
+    the global optimum for all datasets.
+    """
     cdef int n_samples = K.shape[0]
     cdef int it = 0
     cdef int passes = 0
     cdef int alphas_changed
     cdef int i, j
-    cdef double Ei, Ej, ai, aj, newai, newaj, eta, L, H, b1, b2, current_y
+    cdef double Ei, Ej, ai, aj, newai, newaj, eta, L, H, b1, b2, yEi
 
     cdef np.ndarray[np.float_t, ndim=2] yK = y * K
 
@@ -28,18 +34,16 @@ def smo(np.ndarray[np.float_t, ndim=2] K,
     while passes < numpasses and it < maxiter:
         alphas_changed = 0
         for i in range(n_samples):
-            current_y = _margins_kernel(yK[i], dual_coef_, b)
-            Ei = current_y - y[i]
-            if ((y[i] * Ei < -tol and dual_coef_[i] < C) or
-                    (y[i] * Ei > tol and dual_coef_[i] > 0)):
-                # self.alphas[i] needs updating! Pick a j to update it with
+            Ei = _margins_kernel(yK[i], dual_coef_, b) - y[i]
+            yEi = y[i] * Ei
+            if ((yEi < -tol and dual_coef_[i] < C) or (yEi > tol and dual_coef_[i] > 0)):
+                # alphas[i] needs updating! Pick a j to update it with
                 j = i
                 while j == i:
                     j = random_state.randint(n_samples)
-                current_y = _margins_kernel(yK[j], dual_coef_, b)
-                Ej = current_y - y[j]
+                Ej = _margins_kernel(yK[j], dual_coef_, b) - y[j]
 
-                # compute L and H bounds for j to ensure we're in [0 C]x[0 C] box
+                # compute L and H bounds for j to ensure we're in [0, C]x[0, C]
                 ai = dual_coef_[i]
                 aj = dual_coef_[j]
                 if y[i] == y[j]:
@@ -74,9 +78,9 @@ def smo(np.ndarray[np.float_t, ndim=2] K,
                       y[j] * (newaj - aj) * K[j, j])
                 b = 0.5 * (b1 + b2)
 
-                if newai > 0 and newai < C:
+                if 0 < newai < C:
                     b = b1
-                if newaj > 0 and newaj < C:
+                elif 0 < newaj < C:
                     b = b2
 
                 alphas_changed += 1
