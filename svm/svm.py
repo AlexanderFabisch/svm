@@ -121,8 +121,7 @@ class SVM(BaseEstimator, ClassifierMixin):
             self.kernel_args["coef0"] = self.coef0
 
         K = pairwise_kernels(X, metric=self.kernel, **self.kernel_args)
-        n_samples, n_features = X.shape
-        self.dual_coef_ = np.zeros(n_samples)
+        self.dual_coef_ = np.zeros(X.shape[0])
         self.intercept_ = _optimize(
             K, y, self.dual_coef_, self.C, random_state, self.tol,
             self.numpasses, self.maxiter, self.verbose)
